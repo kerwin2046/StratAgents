@@ -12,6 +12,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!ci-agent-ui/src/lib/
+!ci-agent-ui/src/lib/*
 lib64/
 parts/
 sdist/
