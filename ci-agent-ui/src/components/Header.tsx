@@ -20,7 +20,7 @@ export default function Header() {
               <Search className="h-5 w-5 text-white" />
             </div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold text-gray-900">CI Agent</h1>
+              <h1 className="text-xl font-bold text-gray-900">Competitive Intelligence</h1>
               <Badge variant="secondary" className="text-xs">
                 Multi-Agent
               </Badge>

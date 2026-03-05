@@ -1,4 +1,4 @@
-# 🤖 Multi-Agent Competitive Intelligence Platform
+# 🤖 Open Autonomous Multi-Agent Market Intelligence Platform 
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
@@ -8,7 +8,7 @@
 
 > Transform weeks of manual competitive research into minutes of AI-powered analysis using autonomous agents and enterprise-grade web scraping.
 
-![Platform Demo](https://via.placeholder.com/800x400/1f2937/ffffff?text=Multi-Agent+Intelligence+Platform)
+![Platform](/ci-agent-ui/public/ci.png)
 
 ## 🌟 Features
 
@@ -20,7 +20,7 @@
 - **🌊 Real-Time Streaming**: Live progress updates and tool call monitoring
 - **⚡ Enterprise-Grade**: Built with FastAPI, React, and TypeScript
 - **🎯 Comprehensive Analysis**: Pricing, leadership, market position, and strategy
-- **📱 Beautiful UI**: Vercel-inspired design with responsive layout
+- **📱 Clean UI**: Responsive layout with slate/indigo theme and live progress
 - **🔧 Production Ready**: Docker support and scalable architecture
 
 ## 🚀 Quick Start
@@ -29,24 +29,25 @@
 
 - Python 3.10+
 - Node.js 18+
-- [Gemini API Key](https://aistudio.google.com/app/apikey)
+- [DeepSeek API Key](https://platform.deepseek.com/)
 - [Bright Data API Key](https://brightdata.com/)
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/brightdata/competitive-intelligence.git
-cd competitive-intelligence
+git clone https://github.com/kerwin2046/StratAgents.git
+cd StratAgents
 ```
 
 ### 2. Backend Setup
 
 ```bash
-# Install Python dependencies
-cd api && pip install -r requirements.txt
+cd api
+pip install -r requirements.txt
+# Or use a venv: python -m venv venv && source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Set environment variables
-export GEMINI_API_KEY="your_gemini_api_key"
+# Set environment variables (or copy api/.env.example to api/.env)
+export DEEPSEEK_API_KEY="your_deepseek_api_key"
 export BRIGHTDATA_API_KEY="your_brightdata_api_key"
 
 # Start the API server
@@ -73,9 +74,9 @@ The frontend will be available at `http://localhost:5173`
 ### 4. Try It Out!
 
 1. Open the frontend in your browser
-2. Select a demo scenario (Slack, Notion, Figma) or enter a custom company
-3. Click "Start Analysis" and watch the AI agents work in real-time
-4. Get comprehensive competitive intelligence in minutes!
+2. Select a demo scenario (e.g. Nvidia, Notion, Figma, Slack) or enter a custom company name and optional website
+3. Click **Start analysis** and watch the AI agents run in real-time
+4. View the executive report and expand Research findings / Strategic analysis as needed
 
 ## 📋 Table of Contents
 
@@ -86,6 +87,7 @@ The frontend will be available at `http://localhost:5173`
 - [Configuration](#-configuration)
 - [Docker Deployment](#-docker-deployment)
 - [Examples](#-examples)
+- [Testing](#-testing)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -123,8 +125,8 @@ The frontend will be available at `http://localhost:5173`
 - **FastAPI**: Modern, fast web framework for building APIs
 - **Strands Agents**: Autonomous AI agent framework
 - **Bright Data**: Enterprise web scraping and data collection
-- **Google Gemini 2.0**: Advanced language model for analysis
-- **LiteLLM**: Unified interface for multiple AI models
+- **DeepSeek** (via **LiteLLM**): LLM for research, analysis, and report generation
+- **Session persistence**: JSON-backed session store (configurable via `SESSIONS_FILE`)
 
 **Frontend:**
 - **React 18**: Modern UI library with hooks
@@ -139,15 +141,13 @@ The frontend will be available at `http://localhost:5173`
 
 1. **Clone and setup backend:**
 ```bash
-git clone https://github.com/brightdata/competitive-intelligence.git
-cd competitive-intelligence
+git clone StratAgents
+cd StratAgents
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements-api.txt
+cd api
+python -m venv venv
+source venv/bin/activate   # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
 2. **Setup frontend:**
@@ -158,18 +158,17 @@ npm install
 
 3. **Environment configuration:**
 ```bash
-# Copy example environment file
-cp .env.example .env
+# Backend (api/)
+cp api/.env.example api/.env
+# Set DEEPSEEK_API_KEY and BRIGHTDATA_API_KEY in api/.env
 
-# Edit .env with your API keys
-GEMINI_API_KEY=your_gemini_api_key_here
-BRIGHTDATA_API_KEY=your_brightdata_api_key_here
+# Frontend (optional): set VITE_API_URL in ci-agent-ui/.env if API is not on http://localhost:8000
 ```
 
 4. **Start development servers:**
 ```bash
 # Terminal 1: Backend
-python app.py
+cd api && python app.py
 
 # Terminal 2: Frontend
 cd ci-agent-ui && npm run dev
@@ -193,7 +192,9 @@ http://localhost:8000
 GET /health
 ```
 
-#### Competitive Analysis (Streaming)
+#### Competitive Analysis
+
+**Streaming (recommended for UI):**
 ```http
 POST /analyze/stream
 Content-Type: application/json
@@ -204,6 +205,8 @@ Content-Type: application/json
   "stream": true
 }
 ```
+
+**Non-streaming:** `POST /analyze` with the same JSON body (returns full result when done).
 
 #### Get Demo Scenarios
 ```http
@@ -240,10 +243,10 @@ GET /sessions/{session_id}
 
 ### Key Components
 
-- **`CompetitiveIntelligenceForm`**: Main analysis interface with real-time streaming
-- **`DemoScenarios`**: Pre-configured company examples
+- **`CompetitiveIntelligenceForm`**: Main analysis form, streaming progress, and report display
+- **`DemoScenarios`**: Pre-configured company examples (e.g. Nvidia, Notion, Figma, Slack)
 - **`Header`**: Navigation and branding
-- **`ProgressTracker`**: Live agent workflow visualization
+- **`src/api/client`**: API client (`analyzeStream`, `getApiBaseUrl`) and types
 
 ### Available Scripts
 
@@ -256,22 +259,29 @@ npm run lint         # Run ESLint
 
 ### Customization
 
-**Styling**: Modify `tailwind.config.js` for theme customization
-**Components**: Add new shadcn/ui components with `npx shadcn@latest add [component]`
-**API Endpoint**: Update `API_BASE_URL` in component files
+**Styling**: Tailwind and theme in `src/index.css`; components use slate/indigo accents
+**Components**: Add shadcn/ui components with `npx shadcn@latest add [component]`
+**API base URL**: Set `VITE_API_URL` in `ci-agent-ui/.env` (default: `http://localhost:8000`); used by `src/api/client.ts`
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
+**Backend (`api/.env`):**
+
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `GEMINI_API_KEY` | Google AI Studio API key | Yes | - |
+| `DEEPSEEK_API_KEY` | DeepSeek API key | Yes | - |
 | `BRIGHTDATA_API_KEY` | Bright Data API key | Yes | - |
-| `GEMINI_MODEL_NAME` | Gemini model version | No | `gemini-2.0-flash` |
-| `API_HOST` | API server host | No | `0.0.0.0` |
-| `API_PORT` | API server port | No | `8000` |
-| `LOG_LEVEL` | Logging level | No | `info` |
+| `DEEPSEEK_MODEL_NAME` | Model name (e.g. `deepseek-chat`) | No | `deepseek-chat` |
+| `CORS_ORIGINS` | Comma-separated allowed origins | No | `http://localhost:5173,http://localhost:3000` |
+| `SESSIONS_FILE` | Path for session persistence | No | `api/.data/sessions.json` |
+
+**Frontend (`ci-agent-ui/.env`):**
+
+| Variable | Description | Required | Default |
+|----------|-------------|----------|---------|
+| `VITE_API_URL` | Backend API base URL | No | `http://localhost:8000` |
 
 ### Agent Configuration
 
@@ -303,7 +313,7 @@ docker-compose down
 cd api
 docker build -t ci-backend .
 docker run -p 8000:8000 \
-  -e GEMINI_API_KEY=your_key \
+  -e DEEPSEEK_API_KEY=your_key \
   -e BRIGHTDATA_API_KEY=your_key \
   ci-backend
 ```
@@ -396,26 +406,18 @@ print(result['final_report'])
 
 ```bash
 cd api
-pip install pytest httpx
-pytest tests/
+pip install -r requirements.txt   # includes pytest, httpx
+venv/bin/pytest tests/ -v         # or: python -m pytest tests/ -v
 ```
 
-### Frontend Tests
+Tests mock the LLM and use a temp session file; no API keys needed. See `api/README_API.md` for details.
+
+### Frontend
 
 ```bash
 cd ci-agent-ui
-npm test
-npm run test:coverage
-```
-
-### Integration Tests
-
-```bash
-# Start services
-docker-compose up -d
-
-# Run end-to-end tests
-npm run test:e2e
+npm run lint
+# Add unit tests (e.g. Vitest) and run npm test as needed
 ```
 
 ## 🤝 Contributing
@@ -443,9 +445,9 @@ See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes.
 
 ## 🐛 Issues and Support
 
-- **Bug Reports**: [GitHub Issues](https://github.com/brightdata/competitive-intelligence/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/brightdata/competitive-intelligence/discussions)
-- **Documentation**: [Wiki](https://github.com/brightdata/competitive-intelligence/wiki)
+- **Bug Reports**: [GitHub Issues](https://github.com/kerwin2046/StratAgents.git/issues)
+- **Feature Requests**: [GitHub Discussions](https://github.com/kerwin2046/StratAgents.git/discussions)
+- **Documentation**: [Wiki](https://github.com/kerwin2046/StratAgents.git/wiki)
 
 ## 📄 License
 
@@ -455,20 +457,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **[Strands](https://github.com/strands-ai/strands)**: Autonomous AI agent framework
 - **[Bright Data](https://brightdata.com/)**: Enterprise web scraping platform
-- **[Google Gemini](https://ai.google.dev/)**: Advanced language model
+- **[DeepSeek](https://www.deepseek.com/)**: Language model (via LiteLLM)
 - **[FastAPI](https://fastapi.tiangolo.com/)**: Modern Python web framework
-- **[shadcn/ui](https://ui.shadcn.com/)**: Beautiful React components
+- **[shadcn/ui](https://ui.shadcn.com/)**: React component library
 
-## 🔗 Links
 
-- **Blog Post**: [Technical Deep Dive](https://dev.to/brightdata/building-multi-agent-competitive-intelligence)
-
----
-
-<div align="center">
-
-**Built with ❤️ by [Bright Data](https://github.com/brightdata)**
-
-⭐ Star this repo if you find it useful!
-
-</div>
