@@ -10,6 +10,8 @@
 
 ![Platform](/ci-agent-ui/public/ci.png)
 
+**Live Demo:** [https://strat-agents.vercel.app/](https://strat-agents.vercel.app/)
+
 ## 🌟 Features
 
 - **🤖 Multi-Agent Workflow**: Three specialized AI agents working in harmony
