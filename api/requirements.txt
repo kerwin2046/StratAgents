@@ -13,3 +13,6 @@ httpx
 requests
 
 python-dotenv
+pytest
+pytest-asyncio
+httpx

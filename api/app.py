@@ -4,6 +4,7 @@ FastAPI Application for Multi-Agent Competitive Intelligence
 RESTful API with streaming capabilities for real-time tool call monitoring
 """
 
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -25,6 +26,7 @@ import uvicorn
 
 # Import our competitive intelligence system
 from ci_agent import MultiAgentCompetitiveIntelligence, get_llm_model
+from session_store import SessionStore
 
 # Configure logging
 logging.basicConfig(
@@ -33,8 +35,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global storage for streaming sessions
-streaming_sessions: Dict[str, Dict] = {}
+# CORS: comma-separated origins, e.g. http://localhost:5173,https://app.example.com
+# Default allows Vite dev server and common dev ports.
+_cors_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+CORS_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
+# Persistent session store (survives restarts)
+streaming_sessions = SessionStore(persist=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,10 +68,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware for frontend integration
+# Add CORS middleware; origins from env for production safety
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure this for production
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,6 +124,20 @@ class StreamEvent(BaseModel):
     tool_input: Optional[Dict] = None
     data: Optional[Dict] = None
 
+
+def _run_workflow_sync(
+    competitor_name: str,
+    competitor_website: Optional[str],
+    stream_callback: Any,
+) -> Dict[str, Any]:
+    """Run the sync multi-agent workflow (called from thread)."""
+    intelligence_system = MultiAgentCompetitiveIntelligence(stream_callback)
+    return intelligence_system.run_competitive_intelligence_workflow(
+        competitor_name=competitor_name,
+        competitor_website=competitor_website,
+    )
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
@@ -150,31 +171,27 @@ async def get_status():
 async def analyze_competitor(request: AnalysisRequest):
     """
     Perform competitive intelligence analysis
-    
+
     This endpoint runs the full multi-agent workflow and returns complete results.
     For real-time updates, use the streaming endpoint.
     """
     try:
-        logger.info(f"Starting analysis for: {request.competitor_name}")
-        
-        # Initialize the intelligence system
-        intelligence_system = MultiAgentCompetitiveIntelligence()
-        
-        # Run the workflow
-        result = intelligence_system.run_competitive_intelligence_workflow(
-            competitor_name=request.competitor_name,
-            competitor_website=request.competitor_website
+        logger.info("Starting analysis for: %s", request.competitor_name)
+        # Run sync workflow in thread pool to avoid blocking the event loop
+        result = await asyncio.to_thread(
+            _run_workflow_sync,
+            request.competitor_name,
+            request.competitor_website,
+            None,  # no stream callback for non-streaming
         )
-        
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result.get("error", "Analysis failed"))
-        
-        logger.info(f"Analysis completed for: {request.competitor_name}")
-        
+        logger.info("Analysis completed for: %s", request.competitor_name)
         return AnalysisResponse(**result)
-        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Analysis failed for {request.competitor_name}: {str(e)}")
+        logger.exception("Analysis failed for %s", request.competitor_name)
         raise HTTPException(status_code=500, detail=str(e))
 
 # Streaming analysis endpoint
@@ -195,77 +212,66 @@ async def analyze_competitor_stream(request: AnalysisRequest):
     async def generate_stream():
         """Generate streaming events"""
         try:
-            # Initialize session tracking
+            # Initialize session tracking (persisted by SessionStore)
             streaming_sessions[session_id] = {
                 "start_time": datetime.now().isoformat(),
                 "competitor": request.competitor_name,
-                "status": "running"
+                "status": "running",
             }
-            
-            events_queue = asyncio.Queue()
-            
-            def stream_callback(event):
-                """Callback to capture streaming events"""
+
+            events_queue: asyncio.Queue = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+
+            def stream_callback(event: Dict[str, Any]) -> None:
+                """Thread-safe callback: workflow runs in thread, so schedule put on main loop."""
                 try:
-                    # Validate event is JSON serializable before queuing
                     json.dumps(event)
-                    asyncio.create_task(events_queue.put(event))
+                    loop.call_soon_threadsafe(events_queue.put_nowait, event)
                 except (TypeError, ValueError) as json_error:
-                    # Create a safe fallback event
                     safe_event = {
                         "timestamp": datetime.now().isoformat(),
                         "type": "tool_call",
                         "message": f"Non-serializable event received: {str(json_error)}",
-                        "original_type": event.get("type", "unknown") if isinstance(event, dict) else "unknown"
+                        "original_type": event.get("type", "unknown") if isinstance(event, dict) else "unknown",
                     }
-                    asyncio.create_task(events_queue.put(safe_event))
+                    loop.call_soon_threadsafe(events_queue.put_nowait, safe_event)
                 except Exception as e:
-                    logger.error(f"Stream callback error: {e}")
-            
-            # Start analysis in background
-            async def run_analysis():
-                intelligence_system = None
+                    logger.error("Stream callback error: %s", e)
+
+            async def run_analysis() -> None:
                 try:
-                    intelligence_system = MultiAgentCompetitiveIntelligence(stream_callback)
-                    result = intelligence_system.run_competitive_intelligence_workflow(
-                        competitor_name=request.competitor_name,
-                        competitor_website=request.competitor_website
+                    # Run sync workflow in thread pool to avoid blocking the event loop
+                    result = await asyncio.to_thread(
+                        _run_workflow_sync,
+                        request.competitor_name,
+                        request.competitor_website,
+                        stream_callback,
                     )
-                    
-                    # Send final result
+
                     final_event = {
                         "timestamp": datetime.now().isoformat(),
                         "type": "complete",
-                        "data": result
+                        "data": result,
                     }
                     await events_queue.put(final_event)
-                    
-                    # Update session status
-                    streaming_sessions[session_id]["status"] = "completed"
-                    streaming_sessions[session_id]["result"] = result
-                    
+
+                    if session_id in streaming_sessions:
+                        streaming_sessions[session_id]["status"] = "completed"
+                        streaming_sessions[session_id]["result"] = result
+                        streaming_sessions.save()
                 except Exception as e:
-                    logger.error(f"Analysis error for session {session_id}: {e}")
-                    error_event = {
+                    logger.error("Analysis error for session %s: %s", session_id, e)
+                    await events_queue.put({
                         "timestamp": datetime.now().isoformat(),
                         "type": "error",
-                        "message": str(e)
-                    }
-                    await events_queue.put(error_event)
-                    streaming_sessions[session_id]["status"] = "error"
+                        "message": str(e),
+                    })
+                    if session_id in streaming_sessions:
+                        streaming_sessions[session_id]["status"] = "error"
+                        streaming_sessions.save()
                 finally:
-                    # Cleanup resources if possible
-                    if intelligence_system:
-                        try:
-                            # Add cleanup for any resources if needed
-                            pass
-                        except Exception as cleanup_error:
-                            logger.warning(f"Cleanup warning: {cleanup_error}")
-                    
-                    # Signal end of stream
                     await events_queue.put(None)
-            
-            # Start analysis
+
             analysis_task = asyncio.create_task(run_analysis())
             
             # Send initial event
@@ -345,24 +351,25 @@ async def get_active_sessions():
     return {
         "active_sessions": len(streaming_sessions),
         "sessions": {
-            session_id: {
-                "start_time": data["start_time"],
-                "competitor": data["competitor"],
-                "status": data["status"]
+            sid: {
+                "start_time": data.get("start_time"),
+                "competitor": data.get("competitor"),
+                "status": data.get("status"),
             }
-            for session_id, data in streaming_sessions.items()
+            for sid, data in streaming_sessions.items()
         },
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
     }
 
 # Get session details
 @app.get("/sessions/{session_id}")
 async def get_session_details(session_id: str):
-    """Get details for a specific session"""
+    """Get details for a specific session (from persistent store)."""
     if session_id not in streaming_sessions:
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    return streaming_sessions[session_id]
+    data = streaming_sessions[session_id]
+    # Return only JSON-serializable fields (result may contain full analysis)
+    return {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool, type(None), dict, list))}
 
 # Demo scenarios endpoint
 @app.get("/demo-scenarios")

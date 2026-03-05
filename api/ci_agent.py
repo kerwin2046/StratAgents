@@ -31,9 +31,12 @@ logging.basicConfig(
 )
 
 def get_llm_model():
-    """Configure LLM using LiteLLM (DeepSeek by default)."""
+    """Configure LLM using LiteLLM (DeepSeek by default).
+    Default is deepseek-chat: deepseek-reasoner requires reasoning_content in
+    multi-turn/tool-call flows and is not fully compatible with Strands/LiteLLM yet.
+    """
     api_key = os.getenv("DEEPSEEK_API_KEY")
-    model_name = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-reasoner")
+    model_name = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat")
 
     if not api_key:
         raise ValueError(

@@ -57,7 +57,16 @@ python app.py
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 4. Access the API
+### 4. Run tests (optional)
+
+```bash
+cd api
+venv/bin/pytest tests/ -v
+```
+
+Tests mock the LLM and use a temp session file; no API keys needed.
+
+### 5. Access the API
 
 - **API Base URL**: http://localhost:8000
 - **Interactive Docs**: http://localhost:8000/docs
@@ -347,7 +356,7 @@ Example frontend integration coming soon!
 
 ### Common Issues
 
-1. **Environment Variables**: Ensure DEEPSEEK_API_KEY and BRIGHTDATA_API_KEY are set
+1. **Environment Variables**: Ensure DEEPSEEK_API_KEY and BRIGHTDATA_API_KEY are set. Optionally set `CORS_ORIGINS` (comma-separated) and `SESSIONS_FILE` for session persistence path.
 2. **Dependencies**: Make sure strands and related packages are installed
 3. **Port Conflicts**: Default port 8000, change if needed
 4. **Streaming Issues**: Check firewall/proxy settings for SSE support

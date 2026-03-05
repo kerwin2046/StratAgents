@@ -30,6 +30,7 @@ import {
   FileText,
   Loader2
 } from 'lucide-react'
+import { analyzeStream, type AnalysisResult } from '@/api/client'
 import DemoScenarios from './DemoScenarios'
 import Header from './Header'
 import MarkdownRenderer from './MarkdownRenderer'
@@ -41,30 +42,6 @@ const formSchema = z.object({
 })
 
 type FormValues = z.infer<typeof formSchema>
-
-interface StreamEvent {
-  timestamp: string
-  type: string
-  step?: string
-  message?: string
-  tool_name?: string
-  tool_input?: any
-  data?: any
-}
-
-interface AnalysisResult {
-  competitor: string
-  website?: string
-  research_findings: string
-  strategic_analysis: string
-  final_report: string
-  timestamp: string
-  status: string
-  workflow: string
-}
-
-// Use env in production; default to local API for dev (avoid "Failed to fetch" when backend runs on localhost)
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 export default function CompetitiveIntelligenceForm() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -89,73 +66,25 @@ export default function CompetitiveIntelligenceForm() {
     setError(null)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/analyze/stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-        },
-        body: JSON.stringify({
+      await analyzeStream(
+        {
           competitor_name: values.companyName,
           competitor_website: values.companyUrl || undefined,
-          stream: true,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      if (!reader) {
-        throw new Error('Failed to get response reader')
-      }
-
-      while (true) {
-        const { done, value } = await reader.read()
-        
-        if (done) break
-
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const eventData: StreamEvent = JSON.parse(line.slice(6))
-
-              // Update progress and current step based on event type
-              if (eventData.type === 'status_update') {
-                setCurrentStep(eventData.message || '')
-                
-                if (eventData.step === 'research_start') {
-                  setProgress(10)
-                } else if (eventData.step === 'research_complete') {
-                  setProgress(40)
-                } else if (eventData.step === 'analysis_start') {
-                  setProgress(50)
-                } else if (eventData.step === 'analysis_complete') {
-                  setProgress(80)
-                } else if (eventData.step === 'report_start') {
-                  setProgress(85)
-                } else if (eventData.step === 'complete') {
-                  setProgress(100)
-                }
-              } else if (eventData.type === 'complete') {
-                setAnalysisResult(eventData.data as AnalysisResult)
-                setCurrentStep('Analysis complete!')
-                setProgress(100)
-              } else if (eventData.type === 'error') {
-                throw new Error(eventData.message || 'Analysis failed')
-              }
-            } catch (parseError) {
-              console.warn('Failed to parse event:', parseError)
-            }
-          }
+        },
+        {
+          onProgress: setProgress,
+          onStep: setCurrentStep,
+          onResult: (result) => {
+            setAnalysisResult(result)
+            setCurrentStep('Analysis complete!')
+            setProgress(100)
+          },
+          onError: (msg) => {
+            setError(msg)
+            setCurrentStep('Analysis failed')
+          },
         }
-      }
+      )
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
       setError(errorMessage)
